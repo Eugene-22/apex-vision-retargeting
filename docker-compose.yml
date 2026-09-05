@@ -1,0 +1,25 @@
+services:
+  apex_dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    image: apex_vision_retargeting:dev
+    container_name: apex_vision_retargeting_dev
+
+    working_dir: /workspace/apex-vision-retargeting
+
+    volumes:
+      - .:/workspace/apex-vision-retargeting
+      - ../rysen-sdk:/workspace/rysen-sdk
+      - ../apex-hand-urdf:/workspace/apex-hand-urdf:ro
+
+    devices:
+      - /dev/video0:/dev/video0
+
+    environment:
+      - ROS_DISTRO=humble
+      - ROS_DOMAIN_ID=111
+
+    tty: true
+    stdin_open: true

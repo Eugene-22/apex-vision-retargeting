@@ -1,0 +1,23 @@
+{
+    "name": "Apex Vision Retargeting",
+
+    "dockerComposeFile": "../docker-compose.yml",
+
+    "service": "apex_dev",
+
+    "workspaceFolder": "/workspace/apex-vision-retargeting",
+
+    "shutdownAction": "none",
+
+    "postCreateCommand": "python3 -m pip install -e /workspace/rysen-sdk/python",
+
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-vscode.cpptools"
+            ]
+        }
+    }
+}
