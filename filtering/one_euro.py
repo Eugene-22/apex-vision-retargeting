@@ -88,3 +88,26 @@ class OneEuroJointFilter:
                 for name in APEX_ACTIVE_JOINTS
             )
         )
+
+class EMAJointFilter:
+    """Low-latency exponential moving average for Apex joint targets."""
+
+    def __init__(self, alpha: float = 0.55) -> None:
+        if not math.isfinite(alpha) or not 0.0 < alpha <= 1.0:
+            raise ValueError("alpha must be finite and in (0, 1]")
+        self.alpha = float(alpha)
+        self._previous: ApexActiveJointTarget | None = None
+
+    def reset(self, target: ApexActiveJointTarget | None = None) -> None:
+        self._previous = target
+
+    def filter(self, target: ApexActiveJointTarget, dt: float | None = None) -> ApexActiveJointTarget:
+        if self._previous is None:
+            self._previous = target
+            return target
+        values = tuple(
+            self.alpha * current + (1.0 - self.alpha) * previous
+            for current, previous in zip(target.values, self._previous.values)
+        )
+        self._previous = ApexActiveJointTarget(values=values)
+        return self._previous

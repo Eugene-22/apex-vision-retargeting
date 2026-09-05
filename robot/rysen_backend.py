@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import sys
 import time
+import math
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from robot.apex_joint_names import APEX_ACTIVE_JOINTS, ApexActiveJointTarget
+from robot.apex_joint_names import APEX_ACTIVE_JOINTS, APEX_OFFICIAL_LIMITS, ApexActiveJointTarget
 from robot.interface import ApexCommandResult, ApexJointState
 
 DEFAULT_RYSEN_IP = "192.168.0.103"
@@ -38,6 +39,11 @@ SDK_JOINT_ID_ATTRS: dict[str, str] = {
     "right_pinky_j0": "JOINT_ID_PINKY_J0",
     "right_pinky_j1": "JOINT_ID_PINKY_J1",
     "right_pinky_j2": "JOINT_ID_PINKY_J2",
+    "right_thumb_j4": "JOINT_ID_THUMB_J4",
+    "right_index_j3": "JOINT_ID_INDEX_J3",
+    "right_middle_j3": "JOINT_ID_MIDDLE_J3",
+    "right_ring_j3": "JOINT_ID_RING_J3",
+    "right_pinky_j3": "JOINT_ID_PINKY_J3",
 }
 
 
@@ -77,7 +83,7 @@ def enum_name(value: Any) -> str:
 
 def sdk_joint_id_map(joint_id_enum: Any) -> dict[Any, str]:
     mapping: dict[Any, str] = {}
-    for joint_name in APEX_ACTIVE_JOINTS:
+    for joint_name in (*APEX_ACTIVE_JOINTS, "right_thumb_j4", "right_index_j3", "right_middle_j3", "right_ring_j3", "right_pinky_j3"):
         attr = SDK_JOINT_ID_ATTRS[joint_name]
         try:
             sdk_id = getattr(joint_id_enum, attr)
@@ -192,38 +198,90 @@ class RealApexHand:
             raise RysenBackendError(f"SDK connect failed: {enum_name(ret)}")
         self._connected = True
 
-    def command_position(self, target: ApexActiveJointTarget) -> ApexCommandResult:
+    def configure_motion(self, *, max_speed: float = 0.5, max_accel: float = 1.0, torque_nmm: float = 200.0) -> None:
+        """Configure conservative SDK-wide motion bounds when supported."""
+        try:
+            from rysen_apexhand_sdk import JointId, MaxJointAccel, MaxJointSpeed
+        except ImportError:
+            return
+        speeds, accels = [], []
+        for joint_id in self._sdk_to_project_joint:
+            speed, accel = MaxJointSpeed(), MaxJointAccel()
+            speed.joint_id = accel.joint_id = joint_id
+            speed.speed = float(max_speed)
+            accel.accel = float(max_accel)
+            speeds.append(speed); accels.append(accel)
+        self._sdk.set_max_joint_speed(speeds)
+        self._sdk.set_max_joint_accel(accels)
+
+    def enable(self) -> None:
+        try:
+            from rysen_apexhand_sdk import ErrorCode
+            ret = self._sdk.set_all_fingers_enabled()
+            if ret != ErrorCode.ERROR_CODE_OK:
+                raise RysenBackendError(f"enable fingers failed: {enum_name(ret)}")
+        except AttributeError:
+            from rysen_apexhand_sdk import ErrorCode, FingerId
+            ids = [getattr(FingerId, n) for n in ("FINGER_ID_THUMB", "FINGER_ID_INDEX", "FINGER_ID_MIDDLE", "FINGER_ID_RING", "FINGER_ID_PINKY") if hasattr(FingerId, n)]
+            ret = self._sdk.set_finger_enabled(ids)
+            if ret != ErrorCode.ERROR_CODE_OK:
+                raise RysenBackendError(f"enable fingers failed: {enum_name(ret)}")
+
+    def disable(self) -> None:
         if self._closed:
-            raise RysenBackendError("RealApexHand is closed")
-        if not self.is_connected:
+            return
+        try:
+            self._sdk.set_all_fingers_disabled()
+        except AttributeError:
+            try:
+                from rysen_apexhand_sdk import FingerId
+                ids = [getattr(FingerId, n) for n in ("FINGER_ID_THUMB", "FINGER_ID_INDEX", "FINGER_ID_MIDDLE", "FINGER_ID_RING", "FINGER_ID_PINKY") if hasattr(FingerId, n)]
+                self._sdk.set_finger_disabled(ids)
+            except Exception:
+                pass
+
+    def command_position(self, target: ApexActiveJointTarget) -> ApexCommandResult:
+        """Send one official position-follow tick with hardware-safe limits."""
+        if self._closed or not self.is_connected:
             raise RysenBackendError("RealApexHand is not connected")
         try:
-            from rysen_apexhand_sdk import FingerId, JointControlParam
+            from rysen_apexhand_sdk import ErrorCode, create_move_j_position_follow_param
         except ImportError as exc:
-            raise RysenBackendError("Rysen SDK control types are unavailable") from exc
-        commands = []
-        for joint_name, position in zip(APEX_ACTIVE_JOINTS, target.values):
-            command = JointControlParam()
-            command.joint_id = self._project_to_sdk_joint[joint_name]
-            command.position = float(position)
-            command.velocity = 0.2
-            command.acceleration = 0.1
-            commands.append(command)
-        finger_ids = [getattr(FingerId, name) for name in (
-            "FINGER_ID_THUMB", "FINGER_ID_INDEX", "FINGER_ID_MIDDLE",
-            "FINGER_ID_RING", "FINGER_ID_PINKY",
-        ) if hasattr(FingerId, name)]
-        ret = self._sdk.set_finger_enabled(finger_ids)
-        if ret != self._error_code.ERROR_CODE_OK:
-            raise RysenBackendError(f"enable fingers failed: {enum_name(ret)}")
-        try:
-            ret = self._sdk.move_joint(commands)
-            if ret != self._error_code.ERROR_CODE_OK:
-                raise RysenBackendError(f"move_joint failed: {enum_name(ret)}")
-        finally:
-            self._sdk.set_finger_disabled(finger_ids)
-        now = self._clock()
-        return ApexCommandResult(commanded=target, applied=target, timestamp=now, clipped=())
+            raise RysenBackendError("official position-follow API is unavailable") from exc
+        values = target.as_dict()
+        applied_values = {}
+        clipped = []
+        for name in APEX_ACTIVE_JOINTS:
+            lo, hi = APEX_OFFICIAL_LIMITS[name]
+            value = float(values[name])
+            if not math.isfinite(value):
+                raise RysenBackendError(f"non-finite target for {name}")
+            applied = min(hi - 1e-3, max(lo + 1e-3, value))
+            applied_values[name] = applied
+            if applied != value:
+                clipped.append(name)
+        coupled = {
+            "right_thumb_j4": "right_thumb_j3",
+            "right_index_j3": "right_index_j2",
+            "right_middle_j3": "right_middle_j2",
+            "right_ring_j3": "right_ring_j2",
+            "right_pinky_j3": "right_pinky_j2",
+        }
+        for destination, source in coupled.items():
+            applied_values[destination] = applied_values[source]
+        params = [
+            create_move_j_position_follow_param(
+                self._project_to_sdk_joint[name], applied_values[name], 200.0
+            )
+            for name in (*APEX_ACTIVE_JOINTS, *coupled)
+        ]
+        ret = self._sdk.move_j_position_follow(params)
+        if ret == ErrorCode.ERROR_CODE_OUT_OF_RANGE:
+            raise RysenBackendError("move_j_position_follow rejected out-of-range target")
+        if ret != ErrorCode.ERROR_CODE_OK:
+            raise RysenBackendError(f"move_j_position_follow failed: {enum_name(ret)}")
+        applied = ApexActiveJointTarget.from_mapping({name: applied_values[name] for name in APEX_ACTIVE_JOINTS})
+        return ApexCommandResult(target, applied, self._clock(), tuple(clipped))
 
     def get_joint_state(self) -> ApexJointState:
         if self._closed:

@@ -60,6 +60,14 @@ APEX_ACTIVE_JOINTS: tuple[str, ...] = (
 
 APEX_ACTIVE_DOF = len(APEX_ACTIVE_JOINTS)
 
+APEX_OFFICIAL_LIMITS: dict[str, tuple[float, float]] = {
+    "right_thumb_j0": (0.0, 1.5708), "right_thumb_j1": (-0.1745, 1.0472), "right_thumb_j2": (0.0, 1.3963), "right_thumb_j3": (-0.3491, 1.3963),
+    "right_index_j0": (-0.4363, 0.4363), "right_index_j1": (-0.3491, 1.5708), "right_index_j2": (-0.0873, 1.7453),
+    "right_middle_j0": (-0.4363, 0.4363), "right_middle_j1": (-0.3491, 1.5708), "right_middle_j2": (-0.0873, 1.7453),
+    "right_ring_j0": (-0.4363, 0.4363), "right_ring_j1": (-0.3491, 1.5708), "right_ring_j2": (-0.0873, 1.7453),
+    "right_pinky_j0": (-0.4363, 0.4363), "right_pinky_j1": (-0.3491, 1.5708), "right_pinky_j2": (-0.0873, 1.7453),
+}
+
 
 @dataclass(frozen=True)
 class ApexActiveJointTarget:

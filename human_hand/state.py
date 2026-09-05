@@ -45,6 +45,8 @@ class HumanHandState:
         """Convert one MediaPipe result; return None when no hand is detected."""
         world_sets = getattr(result, "hand_world_landmarks", None) or []
         if not world_sets:
+            world_sets = getattr(result, "hand_landmarks", None) or []
+        if not world_sets:
             return None
         world = landmarks_to_numpy(world_sets[0])
         frame = build_palm_frame(world)
