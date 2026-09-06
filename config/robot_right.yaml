@@ -1,0 +1,14 @@
+# Hardware execution requires --execute and an explicit IP (--ip or this field).
+ip: null
+hand_side: right
+urdf_path: ../vendor/rysen-sdk/urdf/apex_hand_right.urdf
+sdk_path: ../vendor/rysen-sdk/python/rysen_apexhand_sdk.py
+command_rate: 30.0
+max_speed: 1.0        # rad/s, also bounded by URDF velocity limits
+max_accel: 5.0       # rad/s^2, configured in the SDK position-follow planner
+finger_torque_pct: 30.0
+target_timeout: 0.5  # seconds since the last valid camera target
+feedback_timeout: 0.5
+startup_timeout: 3.0
+feedback_rate: 100
+return_to_neutral_on_exit: true  # normal exit only; faults/Ctrl+C disable immediately

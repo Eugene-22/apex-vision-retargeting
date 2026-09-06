@@ -1,0 +1,16 @@
+services:
+  apex:
+    image: rysen_sdk:latest
+    container_name: apex_vision_retargeting
+
+    network_mode: host
+
+    working_dir: /workspace
+
+    volumes:
+      - ..:/workspace
+
+    stdin_open: true
+    tty: true
+
+    command: bash

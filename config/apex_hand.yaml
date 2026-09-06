@@ -1,0 +1,40 @@
+# Paths are resolved relative to this YAML, independent of working directory.
+robot:
+  urdf: ../vendor/rysen-sdk/urdf/apex_hand_{hand_side}.urdf
+  # Distal local offsets avoid left-URDF tip/pad naming inconsistencies.
+  tip_offsets:
+    - [0.032, 0, 0]
+    - [0.028, 0, 0]
+    - [0.028, 0, 0]
+    - [0.028, 0, 0]
+    - [0.028, 0, 0]
+
+optimizer:
+  mode: adaptive  # adaptive | vector
+  huber_delta: 0.02  # meters
+  regularization: 0.02
+  contact_weight: 2.0
+  direction_weight: 0.5
+  pinch_close: 0.02  # human thumb-tip distance in meters
+  pinch_open: 0.05
+  pinch_alpha: 0.7
+  max_iterations: 60
+  ftol: 0.000001
+
+retarget:
+  scale_to_robot: true
+  match_bone_lengths: true
+  segment_scaling:
+    - [1, 1, 1]  # thumb CMC->MCP, MCP->IP, IP->tip
+    - [1, 1, 1]  # index MCP->PIP, PIP->DIP, DIP->tip
+    - [1, 1, 1]
+    - [1, 1, 1]
+    - [1, 1, 1]
+  rotation_degrees:
+    right: [0, 0, 0]
+    left: [0, 0, 0]
+  smoothing_alpha: 0.35
+  nominal_fps: 30
+  tracking_timeout: 0.5  # seconds
+  max_joint_speed: 3.0  # rad/s, additionally capped by URDF velocity limits
+
